@@ -1,0 +1,296 @@
+#import <CoreGraphics/CoreGraphics.h>
+#import <UIKit/UIKit.h>
+
+#import "customft/BTOShortCutManager.h"
+#import "customft/BTOAddShortCutViewController.h"
+
+#define NSLog(FORMAT, ...) NSLog(@"[%@]: %@",@"Traverse" , [NSString stringWithFormat:FORMAT, ##__VA_ARGS__])
+
+@interface SBApplication : NSObject
+- (NSString*)bundleIdentifier;
+@end;
+@interface SBApplicationShortcutMenu : UIView
+@property(retain, nonatomic) SBApplication *application;
+- (void)dismissAnimated:(_Bool)arg1 completionHandler:(id)arg2;
+@end
+@interface SpringBoard : UIApplication
+- (void)reboot;
+- (void)powerDown;
+@end
+@interface SBApplicationShortcutMenuContentView : UIView
+@end
+
+@interface UIApplicationShortcutIcon()
+@end
+@interface SBSApplicationShortcutIcon : NSObject
+@end
+@interface SBSApplicationShortcutItem : NSObject
+- (void)setIcon:(id)arg1;
+- (void)setLocalizedSubtitle:(id)arg1;
+- (void)setLocalizedTitle:(id)arg1;
+- (void)setType:(id)arg1;
+@end
+@interface SBSApplicationShortcutSystemIcon : SBSApplicationShortcutIcon
+- (id)initWithType:(UIApplicationShortcutIconType)arg1;
+@end
+@interface SBSApplicationShortcutCustomImageIcon : SBSApplicationShortcutIcon
+- (id)initWithImagePNGData:(id)arg1;
+@end
+@interface SBSApplicationShortcutContactIcon : SBSApplicationShortcutIcon
+-(instancetype)initWithContactIdentifier:(NSString *)contactIdentifier;
+-(instancetype)initWithFirstName:(NSString*)firstName lastName:(NSString*)lastName;
+-(instancetype)initWithFirstName:(NSString*)firstName lastName:(NSString*)lastName imageData:(NSData*)imageData;
+@end
+
+%hook SBApplicationShortcutMenuContentView
+- (id)initWithInitialFrame:(struct CGRect)arg1 containerBounds:(struct CGRect)arg2 orientation:(long long)arg3 shortcutItems:(NSArray <UIApplicationShortcutItem *>*)arg4 application:(SBApplication*)arg5 {
+	NSString *bundleID = arg5.bundleIdentifier;
+	NSMutableArray *aryShortcuts = [arg4 mutableCopy];
+
+	if ([[BTOShortCutManager sharedInstance] containsBundleID:bundleID] == YES) {
+		NSArray *aryObjects = [[BTOShortCutManager sharedInstance] shortCutsForAppWithBundleID:bundleID];
+		NSMutableArray *correctObjects = [NSMutableArray new];
+
+		for (NSArray *item in aryObjects) {
+			SBSApplicationShortcutItem *action = [[SBSApplicationShortcutItem alloc] init];
+			if ([[item objectAtIndex:4] intValue] == 7) {
+				[action setIcon:[[SBSApplicationShortcutCustomImageIcon alloc] initWithImagePNGData:[[BTOShortCutManager sharedInstance] customImageForBundleID:[item objectAtIndex:2] withTitle:[item objectAtIndex:0]]]];
+			} else {
+				[action setIcon:[[SBSApplicationShortcutSystemIcon alloc] initWithType:[[BTOShortCutManager sharedInstance] iconTypeForNumber:[[item objectAtIndex:4] intValue]]]];
+			}
+			[action setLocalizedTitle:[item objectAtIndex:0]];
+			[action setLocalizedSubtitle:[item objectAtIndex:1]];
+			[action setType:[NSString stringWithFormat:@"%@-%@",[item objectAtIndex:2],[item objectAtIndex:0]]];
+			[correctObjects addObject:action];
+		}
+		[aryShortcuts addObjectsFromArray:correctObjects];
+	}
+
+	NSUserDefaults *prefs = [[NSUserDefaults alloc] initWithSuiteName:@"com.bolencki13.customft"];
+	if ([prefs boolForKey:@"addMenu"] == YES) {
+			if ([prefs boolForKey:@"addNotEvery"] == NO) {
+				SBSApplicationShortcutItem *newAction = [[SBSApplicationShortcutItem alloc] init];
+				[newAction setIcon:[[SBSApplicationShortcutSystemIcon alloc] initWithType:UIApplicationShortcutIconTypeAdd]];
+				[newAction setLocalizedTitle:@"New"];
+				[newAction setLocalizedSubtitle:@"Add New Action"];
+				[newAction setType:@"com.bolencki13.customft-newAction"];
+				[aryShortcuts addObject:newAction];
+			} else if ([prefs boolForKey:@"addNotEvery"] == YES && [aryShortcuts count] == 0) {
+				SBSApplicationShortcutItem *newAction = [[SBSApplicationShortcutItem alloc] init];
+				[newAction setIcon:[[SBSApplicationShortcutSystemIcon alloc] initWithType:UIApplicationShortcutIconTypeAdd]];
+				[newAction setLocalizedTitle:@"New"];
+				[newAction setLocalizedSubtitle:@"Add New Action"];
+				[newAction setType:@"com.bolencki13.customft-newAction"];
+				[aryShortcuts addObject:newAction];
+			}
+	}
+	arg4 = aryShortcuts;
+
+	return %orig;
+}
+%end
+
+%hook SBApplicationShortcutMenu
+- (void)menuContentView:(id)arg1 activateShortcutItem:(UIApplicationShortcutItem*)arg2 index:(long long)arg3 {
+	NSString *input = arg2.type;
+	if ([input isEqualToString:@"com.bolencki13.customft-newAction"]) {
+		[self dismissAnimated:YES completionHandler:nil];
+		BTOAddShortCutViewController *controller = [BTOAddShortCutViewController new];
+		UIViewController *rootView = [[UIApplication sharedApplication].keyWindow rootViewController];
+		[rootView presentViewController:controller animated:YES completion:^{
+			controller.txtBundleID.text = self.application.bundleIdentifier;
+    }];
+		return;
+	}
+	NSString *bundleID = @"";
+	NSString *title = @"";
+
+	if ([input containsString:@"-"]) {
+		NSArray *arySplitString = [input componentsSeparatedByString:@"-"];
+		bundleID = [arySplitString objectAtIndex:0];
+		title = [arySplitString objectAtIndex:1];
+  }
+
+	if ([[BTOShortCutManager sharedInstance] containsBundleID:bundleID] == YES) {
+
+		NSString *url = [[BTOShortCutManager sharedInstance] getURLSchemeForBundleID:bundleID withTitle:title];
+
+		if ([url isEqualToString:@"respring"]) {
+				system("killall backboardd");
+		} else if ([url isEqualToString:@"shutdown"]) {
+				[[%c(SpringBoard) sharedApplication] powerDown];
+		} else if ([url isEqualToString:@"reboot"]) {
+				[[%c(SpringBoard) sharedApplication] reboot];
+		} else if ([url isEqualToString:@"safemode"]) {
+				NSArray *aryTemp = @[@"Crash"];
+				NSString *crashTime;
+				crashTime = [aryTemp objectAtIndex:2];
+		} else {
+			if ([url containsString:@"\%@"]) {
+				UIAlertController *alert = [UIAlertController
+																		alertControllerWithTitle:@"Traverse"
+																		message:@"Enter Search Parameters"
+																		preferredStyle:UIAlertControllerStyleAlert];
+
+				UIAlertAction *ok = [UIAlertAction actionWithTitle:@"Search" style:UIAlertActionStyleDefault
+																								 handler:^(UIAlertAction * action) {
+																										 UITextField *txtInput = [alert.textFields objectAtIndex:0];
+																										 NSString *finalURL = [NSString stringWithFormat:@"%@%@",[url stringByReplacingOccurrencesOfString:@"\%@" withString:@""],[txtInput.text stringByReplacingOccurrencesOfString:@" " withString:@"\%20"]];
+																										 [[%c(SpringBoard) sharedApplication] applicationOpenURL:[NSURL URLWithString:finalURL]];
+																								 }];
+				UIAlertAction *cancel = [UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel
+																										 handler:^(UIAlertAction * action) {
+																												 [alert dismissViewControllerAnimated:YES completion:nil];
+																										 }];
+				[alert addAction:ok];
+				[alert addAction:cancel];
+
+				[alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+						textField.placeholder = @"Search Text";
+				}];
+				UIViewController *rootView = [[UIApplication sharedApplication].keyWindow rootViewController];
+				[rootView presentViewController:alert animated:YES completion:nil];
+			} else {
+				[[%c(SpringBoard) sharedApplication] applicationOpenURL:[NSURL URLWithString:url]];
+			}
+		}
+
+		[self dismissAnimated:YES completionHandler:nil];
+	} else {
+		%orig;
+	}
+}
+%end
+
+@interface UIVisualEffectView(Private)
+- (void)_setEffect:(id)arg1;
+@end
+%hook SBApplicationShortcutMenuBackgroundView
+- (void)layoutSubviews {
+	%orig;
+
+	if ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/lib/dpkg/info/org.thebigboss.shortcutix.list"]) {
+		return;
+	}
+
+	NSUserDefaults *prefs = [[NSUserDefaults alloc] initWithSuiteName:@"com.bolencki13.customft"];
+	switch ([prefs integerForKey:@"blur"]) {
+    case 0: {
+		UIVisualEffectView *mybackdropView = MSHookIvar<UIVisualEffectView *>(self, "_backdropView");
+		[mybackdropView _setEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleExtraLight]];
+	}break;
+		case 1:{
+		UIVisualEffectView *mybackdropView = MSHookIvar<UIVisualEffectView *>(self, "_backdropView");
+		[mybackdropView _setEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleLight]];
+	}break;
+		case 2:{
+		UIVisualEffectView *mybackdropView = MSHookIvar<UIVisualEffectView *>(self, "_backdropView");
+		[mybackdropView _setEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
+	}break;
+
+    default:{
+		UIVisualEffectView *mybackdropView = MSHookIvar<UIVisualEffectView *>(self, "_backdropView");
+		[mybackdropView _setEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleExtraLight]];
+	}break;
+    }
+}
+%end
+
+@interface SBApplicationShortcutMenuItemView : UIView
+@property(retain, nonatomic) UIApplicationShortcutItem *shortcutItem; // @synthesize shortcutItem=_shortcutItem;
+- (UIImage *)invertImage:(UIImage *)image;
+- (void)delete:(UILongPressGestureRecognizer *)recognizer;
+@end
+%hook SBApplicationShortcutMenuItemView
+- (id)initWithShortcutItem:(id)arg1 menuPosition:(long long)arg2 orientation:(long long)arg3 application:(id)arg4 assetManagerProvider:(id)arg5 monogrammerProvider:(id)arg6 options:(unsigned long long)arg7 {
+	UILongPressGestureRecognizer *lpgrDelete = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(delete:)];
+	lpgrDelete.minimumPressDuration = 1.0;
+	[self addGestureRecognizer:lpgrDelete];
+
+	return %orig;
+}
+- (void)_setupViewsWithIcon:(id)arg1 title:(id)arg2 subtitle:(id)arg3 {
+	%orig;
+
+	if ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/lib/dpkg/info/org.thebigboss.shortcutix.list"]) {
+		return;
+	}
+
+	UILabel *mytitleLabel = MSHookIvar<UILabel *>(self, "_titleLabel");
+
+	UIImageView *myiconView = MSHookIvar<UIImageView *>(self, "_iconView");
+	if ([[NSString stringWithFormat:@"%@",[mytitleLabel.text lowercaseString]] isEqualToString:@"respring"]) {
+			myiconView.image = [UIImage imageWithContentsOfFile:@"/Library/Application Support/CustomFT/kCustomFT.bundle/respring.png"];
+	} else if ([[NSString stringWithFormat:@"%@",[mytitleLabel.text lowercaseString]] isEqualToString:@"reboot"]) {
+			myiconView.image = [UIImage imageWithContentsOfFile:@"/Library/Application Support/CustomFT/kCustomFT.bundle/reboot.png"];
+	} else if ([[NSString stringWithFormat:@"%@",[mytitleLabel.text lowercaseString]] isEqualToString:@"shutdown"]) {
+			myiconView.image = [UIImage imageWithContentsOfFile:@"/Library/Application Support/CustomFT/kCustomFT.bundle/powerOff.png"];
+	} else if ([[NSString stringWithFormat:@"%@",[mytitleLabel.text lowercaseString]] isEqualToString:@"safemode"] || [[NSString stringWithFormat:@"%@",[mytitleLabel.text lowercaseString]] isEqualToString:@"safe mode"]) {
+			myiconView.image = [UIImage imageWithContentsOfFile:@"/Library/Application Support/CustomFT/kCustomFT.bundle/safeMode.png"];
+	}
+
+	NSUserDefaults *prefs = [[NSUserDefaults alloc] initWithSuiteName:@"com.bolencki13.customft"];
+
+	if ([prefs integerForKey:@"blur"] == 2) {
+		UILabel *mytitleLabel = MSHookIvar<UILabel *>(self, "_titleLabel");
+		UIImageView *myiconView = MSHookIvar<UIImageView *>(self, "_iconView");
+
+		mytitleLabel.textColor = [UIColor whiteColor];
+
+		UILabel *mysubtitleLabel = MSHookIvar<UILabel *>(self, "_subtitleLabel");
+		mysubtitleLabel.textColor = [UIColor whiteColor];
+
+		if ([arg3 isEqualToString:@"FaceTime"] || [arg3 isEqualToString:@"home"] || [arg3 isEqualToString:@"work"] || [arg3 isEqualToString:@"iPhone"] || [arg3 isEqualToString:@"mobile"] || [arg3 isEqualToString:@"main"] || [arg3 isEqualToString:@"home fax"] || [arg3 isEqualToString:@"work fax"] || [arg3 isEqualToString:@"pager"] || [arg3 isEqualToString:@"other"]) return;
+
+		myiconView.image = [self invertImage:myiconView.image];
+	}
+}
+%new
+- (UIImage *)invertImage:(UIImage *)originalImage {
+    UIGraphicsBeginImageContext(originalImage.size);
+    CGContextSetBlendMode(UIGraphicsGetCurrentContext(), kCGBlendModeCopy);
+    CGRect imageRect = CGRectMake(0, 0, originalImage.size.width, originalImage.size.height);
+    [originalImage drawInRect:imageRect];
+
+    CGContextSetBlendMode(UIGraphicsGetCurrentContext(), kCGBlendModeDifference);
+    // translate/flip the graphics context (for transforming from CG* coords to UI* coords
+    CGContextTranslateCTM(UIGraphicsGetCurrentContext(), 0, originalImage.size.height);
+    CGContextScaleCTM(UIGraphicsGetCurrentContext(), 1.0, -1.0);
+    //mask the image
+    CGContextClipToMask(UIGraphicsGetCurrentContext(), imageRect,  originalImage.CGImage);
+    CGContextSetFillColorWithColor(UIGraphicsGetCurrentContext(),[UIColor whiteColor].CGColor);
+    CGContextFillRect(UIGraphicsGetCurrentContext(), CGRectMake(0, 0, originalImage.size.width, originalImage.size.height));
+    UIImage *returnImage = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+
+    return returnImage;
+}
+%new
+- (void)delete:(UILongPressGestureRecognizer *)recognizer {
+	if (recognizer.state == UIGestureRecognizerStateBegan) {
+		UIAlertController *deleteMenu = [UIAlertController alertControllerWithTitle:@"Traverse" message:@"Are you sure you want to delete this action?" preferredStyle:UIAlertControllerStyleActionSheet];
+
+		UIAlertAction *cancelItem = [UIAlertAction actionWithTitle:@"No" style:UIAlertActionStyleCancel handler:nil];
+		UIAlertAction *confirmItem = [UIAlertAction actionWithTitle:@"Yes" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+			[[BTOShortCutManager sharedInstance] deleteShortCutWithBundleID:self.shortcutItem.type];
+		}];
+		[deleteMenu addAction:cancelItem];
+		[deleteMenu addAction:confirmItem];
+
+		UIViewController *rootView = [[UIApplication sharedApplication].keyWindow rootViewController];
+		[rootView presentViewController:deleteMenu animated:YES completion:nil];
+	}
+}
+%end
+
+// %hook SpringBoard
+// - (void)applicationDidFinishLaunching {
+// 	%orig;
+//
+// #define INITIAL_SET_UP(file) if ([file isEqualToString:@"/var/lib/dpkg/info/com.bolencki13.customft.list"] || [file isEqualToString:@"/var/lib/dpkg/info/org.thebigboss.customft.list"]) { if([[NSFileManager defaultManager] fileExistsAtPath:file]) { [[[UIAlertView alloc] initWithTitle:@"CustomFT" message:@"Please buy CustomFT. The developer put a lot of effort into it." delegate:nil cancelButtonTitle:@"I'll buy it" otherButtonTitles:nil, nil] show]; } } else { [[[UIAlertView alloc] initWithTitle:@"CustomFT" message:@"Please buy CustomFT. The developer put a lot of effort into it." delegate:nil cancelButtonTitle:@"I'll buy it" otherButtonTitles:nil, nil] show];};
+// #define SET_UP @"/var/lib/dpkg/info/com.bolencki13.customft.list"
+//     INITIAL_SET_UP(SET_UP);
+// #undef INITIAL_SET_UP
+// #undef SET_UP
+// }
+// %end
