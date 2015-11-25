@@ -6,6 +6,14 @@
 
 #define NSLog(FORMAT, ...) NSLog(@"[%@]: %@",@"Traverse" , [NSString stringWithFormat:FORMAT, ##__VA_ARGS__])
 
+
+@interface SBApplicationShortcutStoreManager : NSObject
++ (id)sharedManager;
+- (void)saveSynchronously;
+- (void)setShortcutItems:(id)arg1 forBundleIdentifier:(id)arg2;
+- (id)shortcutItemsForBundleIdentifier:(NSString*)arg1;
+- (id)init;
+@end
 @interface SBApplication : NSObject
 - (NSString*)bundleIdentifier;
 @end;
@@ -42,52 +50,62 @@
 -(instancetype)initWithFirstName:(NSString*)firstName lastName:(NSString*)lastName imageData:(NSData*)imageData;
 @end
 
+%hook SBApplicationShortcutStoreManager
+- (id)shortcutItemsForBundleIdentifier:(NSString*)arg1 {
+		NSString *bundleID = arg1;
+		NSArray *aryItems = [NSArray new];
+		if (%orig != NULL || %orig != nil) {
+			aryItems = %orig;
+		}
+		NSMutableArray *aryShortcuts = [aryItems mutableCopy];
+
+		if ([[BTOShortCutManager sharedInstance] containsBundleID:bundleID] == YES) {
+			NSArray *aryObjects = [[BTOShortCutManager sharedInstance] shortCutsForAppWithBundleID:bundleID];
+			NSMutableArray *correctObjects = [NSMutableArray new];
+
+			for (NSArray *item in aryObjects) {
+				SBSApplicationShortcutItem *action = [[SBSApplicationShortcutItem alloc] init];
+				if ([[item objectAtIndex:4] intValue] == 7) {
+					[action setIcon:[[SBSApplicationShortcutCustomImageIcon alloc] initWithImagePNGData:[[BTOShortCutManager sharedInstance] customImageForBundleID:[item objectAtIndex:2] withTitle:[item objectAtIndex:0]]]];
+				} else {
+					[action setIcon:[[SBSApplicationShortcutSystemIcon alloc] initWithType:[[BTOShortCutManager sharedInstance] iconTypeForNumber:[[item objectAtIndex:4] intValue]]]];
+				}
+				[action setLocalizedTitle:[item objectAtIndex:0]];
+				[action setLocalizedSubtitle:[item objectAtIndex:1]];
+				[action setType:[NSString stringWithFormat:@"%@-%@",[item objectAtIndex:2],[item objectAtIndex:0]]];
+				[correctObjects addObject:action];
+			}
+			[aryShortcuts addObjectsFromArray:correctObjects];
+		}
+
+		NSUserDefaults *prefs = [[NSUserDefaults alloc] initWithSuiteName:@"com.bolencki13.customft"];
+		if ([prefs boolForKey:@"addMenu"] == YES) {
+				if ([prefs boolForKey:@"addNotEvery"] == NO) {
+					SBSApplicationShortcutItem *newAction = [[SBSApplicationShortcutItem alloc] init];
+					[newAction setIcon:[[SBSApplicationShortcutSystemIcon alloc] initWithType:UIApplicationShortcutIconTypeAdd]];
+					[newAction setLocalizedTitle:@"New"];
+					[newAction setLocalizedSubtitle:@"Add New Action"];
+					[newAction setType:@"com.bolencki13.customft-newAction"];
+					[aryShortcuts addObject:newAction];
+				} else if ([prefs boolForKey:@"addNotEvery"] == YES && [aryShortcuts count] == 0) {
+					SBSApplicationShortcutItem *newAction = [[SBSApplicationShortcutItem alloc] init];
+					[newAction setIcon:[[SBSApplicationShortcutSystemIcon alloc] initWithType:UIApplicationShortcutIconTypeAdd]];
+					[newAction setLocalizedTitle:@"New"];
+					[newAction setLocalizedSubtitle:@"Add New Action"];
+					[newAction setType:@"com.bolencki13.customft-newAction"];
+					[aryShortcuts addObject:newAction];
+				}
+		}
+		return aryShortcuts;
+}
+%end
+
 %hook SBApplicationShortcutMenuContentView
 - (id)initWithInitialFrame:(struct CGRect)arg1 containerBounds:(struct CGRect)arg2 orientation:(long long)arg3 shortcutItems:(NSArray <UIApplicationShortcutItem *>*)arg4 application:(SBApplication*)arg5 {
-	NSString *bundleID = arg5.bundleIdentifier;
-	NSMutableArray *aryShortcuts = [arg4 mutableCopy];
-
-	if ([[BTOShortCutManager sharedInstance] containsBundleID:bundleID] == YES) {
-		NSArray *aryObjects = [[BTOShortCutManager sharedInstance] shortCutsForAppWithBundleID:bundleID];
-		NSMutableArray *correctObjects = [NSMutableArray new];
-
-		for (NSArray *item in aryObjects) {
-			SBSApplicationShortcutItem *action = [[SBSApplicationShortcutItem alloc] init];
-			if ([[item objectAtIndex:4] intValue] == 7) {
-				[action setIcon:[[SBSApplicationShortcutCustomImageIcon alloc] initWithImagePNGData:[[BTOShortCutManager sharedInstance] customImageForBundleID:[item objectAtIndex:2] withTitle:[item objectAtIndex:0]]]];
-			} else {
-				[action setIcon:[[SBSApplicationShortcutSystemIcon alloc] initWithType:[[BTOShortCutManager sharedInstance] iconTypeForNumber:[[item objectAtIndex:4] intValue]]]];
-			}
-			[action setLocalizedTitle:[item objectAtIndex:0]];
-			[action setLocalizedSubtitle:[item objectAtIndex:1]];
-			[action setType:[NSString stringWithFormat:@"%@-%@",[item objectAtIndex:2],[item objectAtIndex:0]]];
-			[correctObjects addObject:action];
-		}
-		[aryShortcuts addObjectsFromArray:correctObjects];
-	}
-
-	NSUserDefaults *prefs = [[NSUserDefaults alloc] initWithSuiteName:@"com.bolencki13.customft"];
-	if ([prefs boolForKey:@"addMenu"] == YES) {
-			if ([prefs boolForKey:@"addNotEvery"] == NO) {
-				SBSApplicationShortcutItem *newAction = [[SBSApplicationShortcutItem alloc] init];
-				[newAction setIcon:[[SBSApplicationShortcutSystemIcon alloc] initWithType:UIApplicationShortcutIconTypeAdd]];
-				[newAction setLocalizedTitle:@"New"];
-				[newAction setLocalizedSubtitle:@"Add New Action"];
-				[newAction setType:@"com.bolencki13.customft-newAction"];
-				[aryShortcuts addObject:newAction];
-			} else if ([prefs boolForKey:@"addNotEvery"] == YES && [aryShortcuts count] == 0) {
-				SBSApplicationShortcutItem *newAction = [[SBSApplicationShortcutItem alloc] init];
-				[newAction setIcon:[[SBSApplicationShortcutSystemIcon alloc] initWithType:UIApplicationShortcutIconTypeAdd]];
-				[newAction setLocalizedTitle:@"New"];
-				[newAction setLocalizedSubtitle:@"Add New Action"];
-				[newAction setType:@"com.bolencki13.customft-newAction"];
-				[aryShortcuts addObject:newAction];
-			}
-	}
-	arg4 = aryShortcuts;
-
+	NSLog(@"%@",arg4);
 	return %orig;
 }
+- 9
 %end
 
 %hook SBApplicationShortcutMenu
