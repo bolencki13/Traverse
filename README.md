@@ -1,5 +1,6 @@
 # Traverse Jailbreak Tweak
 
+Cydia Link:
 http://cydia.saurik.com/package/com.bolencki13.customft/
 
 * version 1.2.0-4
