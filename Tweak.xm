@@ -1,4 +1,5 @@
 #import <CoreGraphics/CoreGraphics.h>
+#include <libactivator/libactivator.h>
 #import <UIKit/UIKit.h>
 
 #import "customft/BTOShortCutManager.h"
@@ -15,11 +16,13 @@
 - (id)init;
 @end
 @interface SBApplication : NSObject
+@property(copy, nonatomic) NSArray *staticShortcutItems;
 - (NSString*)bundleIdentifier;
 @end;
 @interface SBApplicationShortcutMenu : UIView
 @property(retain, nonatomic) SBApplication *application;
 - (void)dismissAnimated:(_Bool)arg1 completionHandler:(id)arg2;
+- (id)_shortcutItemsToDisplay;
 @end
 @interface SpringBoard : UIApplication
 - (void)reboot;
@@ -71,30 +74,15 @@
 					[action setIcon:[[SBSApplicationShortcutSystemIcon alloc] initWithType:[[BTOShortCutManager sharedInstance] iconTypeForNumber:[[item objectAtIndex:4] intValue]]]];
 				}
 				[action setLocalizedTitle:[item objectAtIndex:0]];
-				[action setLocalizedSubtitle:[item objectAtIndex:1]];
+				if ([[item objectAtIndex:1] isEqualToString:@"*ignore*"]) {
+					[action setLocalizedSubtitle:nil];
+				} else {
+					[action setLocalizedSubtitle:[item objectAtIndex:1]];
+				}
 				[action setType:[NSString stringWithFormat:@"%@-%@",[item objectAtIndex:2],[item objectAtIndex:0]]];
 				[correctObjects addObject:action];
 			}
 			[aryShortcuts addObjectsFromArray:correctObjects];
-		}
-
-		NSUserDefaults *prefs = [[NSUserDefaults alloc] initWithSuiteName:@"com.bolencki13.customft"];
-		if ([prefs boolForKey:@"addMenu"] == YES) {
-				if ([prefs boolForKey:@"addNotEvery"] == NO) {
-					SBSApplicationShortcutItem *newAction = [[SBSApplicationShortcutItem alloc] init];
-					[newAction setIcon:[[SBSApplicationShortcutSystemIcon alloc] initWithType:UIApplicationShortcutIconTypeAdd]];
-					[newAction setLocalizedTitle:@"New"];
-					[newAction setLocalizedSubtitle:@"Add New Action"];
-					[newAction setType:@"com.bolencki13.customft-newAction"];
-					[aryShortcuts addObject:newAction];
-				} else if ([prefs boolForKey:@"addNotEvery"] == YES && [aryShortcuts count] == 0) {
-					SBSApplicationShortcutItem *newAction = [[SBSApplicationShortcutItem alloc] init];
-					[newAction setIcon:[[SBSApplicationShortcutSystemIcon alloc] initWithType:UIApplicationShortcutIconTypeAdd]];
-					[newAction setLocalizedTitle:@"New"];
-					[newAction setLocalizedSubtitle:@"Add New Action"];
-					[newAction setType:@"com.bolencki13.customft-newAction"];
-					[aryShortcuts addObject:newAction];
-				}
 		}
 		return aryShortcuts;
 }
@@ -102,13 +90,41 @@
 
 %hook SBApplicationShortcutMenuContentView
 - (id)initWithInitialFrame:(struct CGRect)arg1 containerBounds:(struct CGRect)arg2 orientation:(long long)arg3 shortcutItems:(NSArray <UIApplicationShortcutItem *>*)arg4 application:(SBApplication*)arg5 {
-	NSLog(@"%@",arg4);
+	// NSLog(@"%@",[%c(LAActivator) sharedInstance].availableEventNames);
 	return %orig;
 }
-- 9
 %end
 
 %hook SBApplicationShortcutMenu
+- (id)_shortcutItemsToDisplay {
+	if (self.application == nil) {
+		return %orig;
+	}
+	NSMutableArray *objects = [NSMutableArray new];
+	[objects addObjectsFromArray:self.application.staticShortcutItems];
+	[objects addObjectsFromArray:[[%c(SBApplicationShortcutStoreManager) sharedManager] shortcutItemsForBundleIdentifier:self.application.bundleIdentifier]];
+
+	NSUserDefaults *prefs = [[NSUserDefaults alloc] initWithSuiteName:@"com.bolencki13.customft"];
+	if ([prefs boolForKey:@"addMenu"] == YES) {
+			if ([prefs boolForKey:@"addNotEvery"] == NO) {
+				SBSApplicationShortcutItem *newAction = [[SBSApplicationShortcutItem alloc] init];
+				[newAction setIcon:[[SBSApplicationShortcutSystemIcon alloc] initWithType:UIApplicationShortcutIconTypeAdd]];
+				[newAction setLocalizedTitle:@"New"];
+				[newAction setLocalizedSubtitle:@"Add New Action"];
+				[newAction setType:@"com.bolencki13.customft-newAction"];
+				[objects addObject:newAction];
+			} else if ([prefs boolForKey:@"addNotEvery"] == YES && [objects count] == 0) {
+				SBSApplicationShortcutItem *newAction = [[SBSApplicationShortcutItem alloc] init];
+				[newAction setIcon:[[SBSApplicationShortcutSystemIcon alloc] initWithType:UIApplicationShortcutIconTypeAdd]];
+				[newAction setLocalizedTitle:@"New"];
+				[newAction setLocalizedSubtitle:@"Add New Action"];
+				[newAction setType:@"com.bolencki13.customft-newAction"];
+				[objects addObject:newAction];
+			}
+	}
+
+	return objects;
+}
 - (void)menuContentView:(id)arg1 activateShortcutItem:(UIApplicationShortcutItem*)arg2 index:(long long)arg3 {
 	NSString *input = arg2.type;
 	if ([input isEqualToString:@"com.bolencki13.customft-newAction"]) {
@@ -143,6 +159,13 @@
 				NSArray *aryTemp = @[@"Crash"];
 				NSString *crashTime;
 				crashTime = [aryTemp objectAtIndex:2];
+		} else if ([url containsString:@"shellScript://"]) {
+			const char *command = [[url stringByReplacingOccurrencesOfString:@"shellScript://" withString:@""] UTF8String];
+			system(command);
+		} else if ([url containsString:@"activator://"]) {
+			NSString *BTOShortCutActivatorEventName = [url stringByReplacingOccurrencesOfString:@"activator://" withString:@""];
+			LAEvent *event = [%c(LAEvent) eventWithName:BTOShortCutActivatorEventName mode:[%c(LAActivator) sharedInstance].currentEventMode];
+			[[%c(LAActivator) sharedInstance] sendEventToListener:event];
 		} else {
 			if ([url containsString:@"\%@"]) {
 				UIAlertController *alert = [UIAlertController
@@ -300,6 +323,92 @@
 	}
 }
 %end
+
+
+
+// static NSString *BTO_TraverseEventDummy1 = @"com.bolencki13.traverse.dummy.one";
+// static NSString *BTO_TraverseEventDummy2 = @"com.bolencki13.traverse.dummy.two";
+// static NSString *BTO_TraverseEventDummy3 = @"com.bolencki13.traverse.dummy.three";
+//
+// @interface BTO_TraverseEventDataSource: NSObject <LAEventDataSource> {
+// }
+// + (id)sharedInstance;
+// @end
+// @implementation BTO_TraverseEventDataSource
+// + (id)sharedInstance {
+// 	static BTO_TraverseEventDataSource *shared = nil;
+// 	if (!shared) {
+// 		shared = [[BTO_TraverseEventDataSource alloc] init];
+// 	}
+// 	return shared;
+// }
+// - (id)init {
+// 	if ((self = [super init])) {
+// 		[[objc_getClass("LAActivator") sharedInstance] registerEventDataSource:self forEventName:BTO_TraverseEventDummy1];
+// 		[[objc_getClass("LAActivator") sharedInstance] registerEventDataSource:self forEventName:BTO_TraverseEventDummy2];
+// 		[[objc_getClass("LAActivator") sharedInstance] registerEventDataSource:self forEventName:BTO_TraverseEventDummy3];
+// 	}
+// 	return self;
+// }
+// - (void)dealloc {
+// 	if ([[objc_getClass("LAActivator") sharedInstance] isRunningInsideSpringBoard]) {
+// 		[[objc_getClass("LAActivator") sharedInstance] unregisterEventDataSourceWithEventName:BTO_TraverseEventDummy1];
+// 		[[objc_getClass("LAActivator") sharedInstance] unregisterEventDataSourceWithEventName:BTO_TraverseEventDummy2];
+// 		[[objc_getClass("LAActivator") sharedInstance] unregisterEventDataSourceWithEventName:BTO_TraverseEventDummy3];
+// 	}
+// 	[super dealloc];
+// }
+// - (NSString *)localizedTitleForEventName:(NSString *)eventName {
+// 	NSString *title = @"";
+//
+// 	if ([eventName isEqualToString:BTO_TraverseEventDummy1]) {
+// 		title = @"Dummy One";
+// 	} else if ([eventName isEqualToString:BTO_TraverseEventDummy2]) {
+// 		title = @"Dummy Two";
+// 	} else if ([eventName isEqualToString:BTO_TraverseEventDummy3]) {
+// 		title = @"Dummy Three";
+// 	}
+//
+// 	return title;
+// }
+// - (NSString *)localizedGroupForEventName:(NSString *)eventName {
+// 	return @"Traverse";
+// }
+// - (NSString *)localizedDescriptionForEventName:(NSString *)eventName {
+// 	NSString *description = @"";
+//
+// 	if ([eventName isEqualToString:BTO_TraverseEventDummy1]) {
+// 		description = @"Dummy Event #1 for Traverse";
+// 	} else if ([eventName isEqualToString:BTO_TraverseEventDummy2]) {
+// 		description = @"Dummy Event #2 for Traverse";
+// 	} else if ([eventName isEqualToString:BTO_TraverseEventDummy3]) {
+// 		description = @"Dummy Event #3 for Traverse";
+// 	}
+//
+// 	return description;
+// }
+// - (BOOL)eventWithNameIsHidden:(NSString *)eventName {
+// 	return NO;
+// }
+// - (BOOL)eventWithNameRequiresAssignment:(NSString *)eventName {
+// 	return NO;
+// }
+// - (BOOL)eventWithName:(NSString *)eventName isCompatibleWithMode:(NSString *)eventMode {
+//   if ([eventMode isEqualToString:@"springboard"]) {
+//     return YES;
+//   }
+//   return NO;
+// }
+// - (BOOL)eventWithNameSupportsUnlockingDeviceToSend:(NSString *)eventName {
+// 	return NO;
+// }
+// @end
+// %ctor {
+// 	%init;
+// 	[%c(BTO_TraverseEventDataSource) sharedInstance];
+// }
+
+
 
 // %hook SpringBoard
 // - (void)applicationDidFinishLaunching {

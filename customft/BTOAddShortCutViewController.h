@@ -9,11 +9,22 @@
 #import <UIKit/UIKit.h>
 #import "BTOShortCutManager.h"
 
+@interface BTOInputView : UIView {
+    UISegmentedControl *_segmentedControl;
+    UITextField *_txtURLScheme;
+    UITextField *txtSchellScript;
+
+    NSString *activatorAction;
+}
+@property (nonatomic, retain) UISegmentedControl *segmentedControl;
+@property (nonatomic, retain) UITextField *txtURLScheme;
+- (NSString*)getURL;
+@end
 @interface BTOAddShortCutViewController : UIViewController <UIPickerViewDataSource, UIPickerViewDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate> {
     UITextField *_txtTitle;
     UITextField *_txtSubTitle;
     UITextField *_txtBundleID;
-    UITextField *_txtNSURL;
+    BTOInputView *viewInput;
     NSString *pickedImage;
 
     NSArray *aryIcons;
@@ -23,7 +34,7 @@
 @property (retain, nonatomic) UITextField *txtTitle;
 @property (retain, nonatomic) UITextField *txtSubTitle;
 @property (retain, nonatomic) UITextField *txtBundleID;
-@property (retain, nonatomic) UITextField *txtNSURL;
 @property (nonatomic) NSInteger iconNumber;
 - (void)setIconNumber:(NSInteger)iconNumber;
+- (void)setURLText:(NSString*)text;
 @end

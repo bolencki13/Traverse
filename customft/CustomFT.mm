@@ -77,11 +77,6 @@
     refreshControl = [[UIRefreshControl alloc] init];
     [refreshControl addTarget:self action:@selector(refreshTable) forControlEvents:UIControlEventValueChanged];
     [tblShortCuts addSubview:refreshControl];
-
-    static dispatch_once_t p = 0;
-    dispatch_once(&p, ^{
-      [[[UIAlertView alloc] initWithTitle:@"Traverse" message:@"Start by adding an action. Click the \"Edit\" button in the upper right. Then click the \"+\" button in the upper left."  delegate:nil cancelButtonTitle:@"I got it!" otherButtonTitles:nil] show];
-    });
 }
 
 #pragma mark - UIButton Functions
@@ -172,7 +167,7 @@
     controller.txtTitle.text = [item objectAtIndex:0];
     controller.txtSubTitle.text = [item objectAtIndex:1];
     controller.txtBundleID.text = [item objectAtIndex:2];
-    controller.txtNSURL.text = [item objectAtIndex:3];
+    [controller setURLText:[item objectAtIndex:3]];
     [controller setIconNumber:[[item objectAtIndex:4] intValue]];
   }];
 

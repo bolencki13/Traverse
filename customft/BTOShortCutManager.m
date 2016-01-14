@@ -58,8 +58,11 @@
     [dictShortCuts writeToFile:FILE_PATH atomically:YES];
 }
 - (void)addShortCutWithTitle:(NSString *)title withSubTitle:(NSString *)subTitle withBundleID:(NSString *)bundleID withURL:(NSString*)url withIcon:(NSInteger)iconNumber withImage:(NSString*)image {
-    if ([title isEqualToString:@""] || [subTitle isEqualToString:@""] || [bundleID isEqualToString:@""]) {
+    if ([title isEqualToString:@""] || [bundleID isEqualToString:@""]) {
         return;
+    }
+    if ([subTitle isEqualToString:@""]) {
+      subTitle = @"*ignore*";
     }
 
     NSMutableDictionary *data = [[NSMutableDictionary alloc] initWithContentsOfFile:FILE_PATH];
@@ -194,7 +197,6 @@
 //        case 28:
 //            [self setFTActionWithIcon:[UIApplicationShortcutIcon iconWithType:UIApplicationShortcutIconTypeUpdate]];
 //            break;
-
       default:
           return UIApplicationShortcutIconTypeAdd;
           break;
