@@ -1,16 +1,15 @@
 GO_EASY_ON_ME = 1
-export THEOS_BUILD_DIR = deb
 ARCHS = armv7 arm64
-TARGET_CFLAGS = -fobjc-arc
+SDKVERSION = 9.2
 
-include theos/makefiles/common.mk
+include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = CustomFT
-CustomFT_FILES = Tweak.xm customft/BTOShortCutManager.m customft/BTOAddShortCutViewController.m
-CustomFT_FRAMEWORKS = UIKit CoreGraphics
-CustomFT_PRIVATE_FRAMEWORKS = SpringBoardServices
-CustomFT_CODESIGN_FLAGS = -Sentitlements.xml
-CustomFT_LDFLAGS += -Wl,-segalign,4000
+CustomFT_FILES = Applications.xm ControlCenter.xm
+CustomFT_FRAMEWORKS = UIKit CoreGraphics AudioToolbox
+CustomFT_PRIVATE_FRAMEWORKS = SpringBoardServices Preferences
+CustomFT_CFLAGS = -fobjc-arc
+CustomFT_LIBRARIES = Traverse
 
 BUNDLE_NAME = kCustomFT
 kCustomFT_INSTALL_PATH = /Library/Application Support/CustomFT
@@ -20,5 +19,5 @@ include $(THEOS_MAKE_PATH)/tweak.mk
 
 after-install::
 	install.exec "killall -9 SpringBoard"
-SUBPROJECTS += customft
+SUBPROJECTS += traverse
 include $(THEOS_MAKE_PATH)/aggregate.mk
